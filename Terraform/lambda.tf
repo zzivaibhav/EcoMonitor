@@ -1,5 +1,4 @@
 # AWS Lambda Functions for IoT Device Simulation
-# filepath: /Users/vaibhav_patel/Documents/EcoMonitor/Terraform/lambda.tf
 
 # IAM role for Lambda functions
 resource "aws_iam_role" "lambda_role" {
