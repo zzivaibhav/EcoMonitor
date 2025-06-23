@@ -1,20 +1,51 @@
-import boto3
 import json
 import random
-import time
+import boto3
+import logging
 import os
 
-IOT_ENDPOINT = os.environ['IOT_ENDPOINT']
+# Set up logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 def lambda_handler(event, context):
-    value = random.randint(0, 150)
+    # Get the IoT endpoint from environment variables
+    iot_endpoint = os.environ.get('IOT_ENDPOINT')
+    
+    # Generate random AQI data
+    aqi = round(random.uniform(10.0, 150.0), 1)
+    
+    # Determine air quality category
+    category = "Good"
+    if aqi > 100:
+        category = "Unhealthy"
+    elif aqi > 50:
+        category = "Moderate"
+    
+    # Create the payload
     payload = {
-        "device_id": "aqi-001",
-        "type": "aqi",
-        "timestamp": int(time.time()),
-        "value": value
+        'device_id': 'aqi_sensor_01',
+        'aqi': aqi,
+        'category': category,
+        'timestamp': context.aws_request_id
     }
-    topic = "sensors/aqi"
-    iot_client = boto3.client('iot-data', endpoint_url=f"https://{IOT_ENDPOINT}")
-    iot_client.publish(topic=topic, qos=0, payload=json.dumps(payload))
-    return {'statusCode': 200, 'body': json.dumps({'published': payload})}
+    
+    # Log the sensor data
+    logger.info(f"AQI sensor data: {json.dumps(payload)}")
+    
+    # Publish to IoT Core topic
+    client = boto3.client('iot-data', endpoint_url=f'https://{iot_endpoint}')
+    
+    response = client.publish(
+        topic='eco/sensors/aqi',
+        qos=1,
+        payload=json.dumps(payload)
+    )
+    
+    # Log the response
+    logger.info(f"IoT publish response: {response}")
+    
+    return {
+        'statusCode': 200,
+        'body': json.dumps('AQI data published successfully')
+    }

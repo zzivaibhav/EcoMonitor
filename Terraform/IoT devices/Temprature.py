@@ -1,20 +1,44 @@
-import boto3
 import json
 import random
-import time
+import boto3
+import logging
 import os
 
-IOT_ENDPOINT = os.environ['IOT_ENDPOINT']
+# Set up logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 def lambda_handler(event, context):
-    value = round(random.uniform(20.0, 27.0), 2)
+    # Get the IoT endpoint from environment variables
+    iot_endpoint = os.environ.get('IOT_ENDPOINT')
+    
+    # Generate random temperature data (in Celsius)
+    temperature = round(random.uniform(18.0, 35.0), 1)
+    
+    # Create the payload
     payload = {
-        "device_id": "temp-001",
-        "type": "temperature",
-        "timestamp": int(time.time()),
-        "value": value
+        'device_id': 'temp_sensor_01',
+        'temperature': temperature,
+        'unit': 'Celsius',
+        'timestamp': context.aws_request_id
     }
-    topic = "sensors/temperature"
-    iot_client = boto3.client('iot-data', endpoint_url=f"https://{IOT_ENDPOINT}")
-    iot_client.publish(topic=topic, qos=0, payload=json.dumps(payload))
-    return {'statusCode': 200, 'body': json.dumps({'published': payload})}
+    
+    # Log the sensor data
+    logger.info(f"Temperature sensor data: {json.dumps(payload)}")
+    
+    # Publish to IoT Core topic
+    client = boto3.client('iot-data', endpoint_url=f'https://{iot_endpoint}')
+    
+    response = client.publish(
+        topic='eco/sensors/temperature',
+        qos=1,
+        payload=json.dumps(payload)
+    )
+    
+    # Log the response
+    logger.info(f"IoT publish response: {response}")
+    
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Temperature data published successfully')
+    }
