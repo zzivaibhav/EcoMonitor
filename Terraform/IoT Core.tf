@@ -110,7 +110,7 @@ resource "aws_iot_thing_principal_attachment" "co2_cert_attach" {
   thing     = aws_iot_thing.co2_sensor.name
 }
 
-# IoT Rule to route temperature data to CloudWatch
+# IoT Rule to route temperature data to CloudWatch and S3
 resource "aws_iot_topic_rule" "temperature_rule" {
   name        = "temperature_data_rule"
   description = "Rule for processing temperature sensor data"
@@ -121,6 +121,12 @@ resource "aws_iot_topic_rule" "temperature_rule" {
   cloudwatch_logs {
     log_group_name = aws_cloudwatch_log_group.sensor_logs.name
     role_arn       = aws_iam_role.iot_role.arn
+  }
+  
+  s3 {
+    bucket_name = aws_s3_bucket.ecomonitor_raw_data.bucket
+    key         = "$${topic()}/data.json"
+    role_arn    = aws_iam_role.iot_role.arn
   }
 }
 
@@ -136,6 +142,12 @@ resource "aws_iot_topic_rule" "humidity_rule" {
     log_group_name = aws_cloudwatch_log_group.sensor_logs.name
     role_arn       = aws_iam_role.iot_role.arn
   }
+  
+  s3 {
+    bucket_name = aws_s3_bucket.ecomonitor_raw_data.bucket
+    key         = "$${topic()}/data.json"
+    role_arn    = aws_iam_role.iot_role.arn
+  }
 }
 
 resource "aws_iot_topic_rule" "aqi_rule" {
@@ -149,6 +161,12 @@ resource "aws_iot_topic_rule" "aqi_rule" {
     log_group_name = aws_cloudwatch_log_group.sensor_logs.name
     role_arn       = aws_iam_role.iot_role.arn
   }
+  
+  s3 {
+    bucket_name = aws_s3_bucket.ecomonitor_raw_data.bucket
+    key         = "$${topic()}/data.json"
+    role_arn    = aws_iam_role.iot_role.arn
+  }
 }
 
 resource "aws_iot_topic_rule" "co2_rule" {
@@ -161,6 +179,27 @@ resource "aws_iot_topic_rule" "co2_rule" {
   cloudwatch_logs {
     log_group_name = aws_cloudwatch_log_group.sensor_logs.name
     role_arn       = aws_iam_role.iot_role.arn
+  }
+  
+  s3 {
+    bucket_name = aws_s3_bucket.ecomonitor_raw_data.bucket
+    key         = "$${topic()}/data.json"
+    role_arn    = aws_iam_role.iot_role.arn
+  }
+}
+
+# IoT Rule to route ALL sensor data to S3 for archival
+resource "aws_iot_topic_rule" "all_sensors_s3_rule" {
+  name        = "all_sensors_s3_rule"
+  description = "Rule for storing all sensor data in S3 as-is"
+  enabled     = true
+  sql         = "SELECT * FROM 'sensors/#'"
+  sql_version = "2016-03-23"
+  
+  s3 {
+    bucket_name = aws_s3_bucket.ecomonitor_raw_data.bucket
+    key         = "raw-data/$${topic()}.json"
+    role_arn    = aws_iam_role.iot_role.arn
   }
 }
 
@@ -209,6 +248,18 @@ resource "aws_iam_role_policy" "iot_logging_policy" {
         ]
         Effect   = "Allow"
         Resource = "${aws_cloudwatch_log_group.sensor_logs.arn}:*"
+      },
+      {
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:ListBucket"
+        ],
+        Effect   = "Allow",
+        Resource = [
+          "${aws_s3_bucket.ecomonitor_raw_data.arn}",
+          "${aws_s3_bucket.ecomonitor_raw_data.arn}/*"
+        ]
       }
     ]
   })
