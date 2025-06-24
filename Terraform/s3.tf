@@ -1,6 +1,7 @@
 # S3 bucket configuration for storing EcoMonitor raw data
 resource "aws_s3_bucket" "ecomonitor_raw_data" {
   bucket = "ecomonitor-raw-b01006432"
+  force_destroy = true  # This allows Terraform to destroy a bucket with content
 
   tags = {
     Name        = "EcoMonitor Raw Data"
