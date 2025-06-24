@@ -73,10 +73,10 @@ resource "aws_iot_policy" "sensor_policy" {
           "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:client/${aws_iot_thing.humidity_sensor.name}",
           "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:client/${aws_iot_thing.aqi_sensor.name}",
           "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:client/${aws_iot_thing.co2_sensor.name}",
-          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/sensors/temperature",
-          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/sensors/humidity",
-          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/sensors/aqi",
-          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/sensors/co2"
+          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/eco/sensors/temperature",
+          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/eco/sensors/humidity",
+          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/eco/sensors/aqi",
+          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/eco/sensors/co2"
         ]
       }
     ]
@@ -115,7 +115,7 @@ resource "aws_iot_topic_rule" "temperature_rule" {
   name        = "temperature_data_rule"
   description = "Rule for processing temperature sensor data"
   enabled     = true
-  sql         = "SELECT *, timestamp() as timestamp FROM 'sensors/temperature'"
+  sql         = "SELECT *, timestamp() as timestamp FROM 'eco/sensors/temperature'"
   sql_version = "2016-03-23"
 
   cloudwatch_logs {
@@ -135,7 +135,7 @@ resource "aws_iot_topic_rule" "humidity_rule" {
   name        = "humidity_data_rule"
   description = "Rule for processing humidity sensor data"
   enabled     = true
-  sql         = "SELECT *, timestamp() as timestamp FROM 'sensors/humidity'"
+  sql         = "SELECT *, timestamp() as timestamp FROM 'eco/sensors/humidity'"
   sql_version = "2016-03-23"
 
   cloudwatch_logs {
@@ -154,7 +154,7 @@ resource "aws_iot_topic_rule" "aqi_rule" {
   name        = "aqi_data_rule"
   description = "Rule for processing air quality sensor data"
   enabled     = true
-  sql         = "SELECT *, timestamp() as timestamp FROM 'sensors/aqi'"
+  sql         = "SELECT *, timestamp() as timestamp FROM 'eco/sensors/aqi'"
   sql_version = "2016-03-23"
 
   cloudwatch_logs {
@@ -173,7 +173,7 @@ resource "aws_iot_topic_rule" "co2_rule" {
   name        = "co2_data_rule"
   description = "Rule for processing CO2 sensor data"
   enabled     = true
-  sql         = "SELECT *, timestamp() as timestamp FROM 'sensors/co2'"
+  sql         = "SELECT *, timestamp() as timestamp FROM 'eco/sensors/co2'"
   sql_version = "2016-03-23"
 
   cloudwatch_logs {
@@ -193,7 +193,7 @@ resource "aws_iot_topic_rule" "all_sensors_s3_rule" {
   name        = "all_sensors_s3_rule"
   description = "Rule for storing all sensor data in S3 as-is"
   enabled     = true
-  sql         = "SELECT * FROM 'sensors/#'"
+  sql         = "SELECT * FROM 'eco/sensors/#'"
   sql_version = "2016-03-23"
   
   s3 {
