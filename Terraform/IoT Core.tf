@@ -73,10 +73,10 @@ resource "aws_iot_policy" "sensor_policy" {
           "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:client/${aws_iot_thing.humidity_sensor.name}",
           "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:client/${aws_iot_thing.aqi_sensor.name}",
           "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:client/${aws_iot_thing.co2_sensor.name}",
-          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/sensors/temperature",
-          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/sensors/humidity",
-          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/sensors/aqi",
-          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/sensors/co2"
+          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/eco/sensors/temperature",
+          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/eco/sensors/humidity",
+          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/eco/sensors/aqi",
+          "arn:aws:iot:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:topic/eco/sensors/co2"
         ]
       }
     ]
@@ -110,17 +110,23 @@ resource "aws_iot_thing_principal_attachment" "co2_cert_attach" {
   thing     = aws_iot_thing.co2_sensor.name
 }
 
-# IoT Rule to route temperature data to CloudWatch
+# IoT Rule to route temperature data to CloudWatch and S3
 resource "aws_iot_topic_rule" "temperature_rule" {
   name        = "temperature_data_rule"
   description = "Rule for processing temperature sensor data"
   enabled     = true
-  sql         = "SELECT * FROM 'sensors/temperature'"
+  sql         = "SELECT *, timestamp() as timestamp FROM 'eco/sensors/temperature'"
   sql_version = "2016-03-23"
 
   cloudwatch_logs {
     log_group_name = aws_cloudwatch_log_group.sensor_logs.name
     role_arn       = aws_iam_role.iot_role.arn
+  }
+  
+  s3 {
+    bucket_name = aws_s3_bucket.ecomonitor_raw_data.bucket
+    key         = "sensors/temperature/${timestamp()}.json"
+    role_arn    = aws_iam_role.iot_role.arn
   }
 }
 
@@ -129,12 +135,18 @@ resource "aws_iot_topic_rule" "humidity_rule" {
   name        = "humidity_data_rule"
   description = "Rule for processing humidity sensor data"
   enabled     = true
-  sql         = "SELECT * FROM 'sensors/humidity'"
+  sql         = "SELECT *, timestamp() as timestamp FROM 'eco/sensors/humidity'"
   sql_version = "2016-03-23"
 
   cloudwatch_logs {
     log_group_name = aws_cloudwatch_log_group.sensor_logs.name
     role_arn       = aws_iam_role.iot_role.arn
+  }
+  
+  s3 {
+    bucket_name = aws_s3_bucket.ecomonitor_raw_data.bucket
+    key         = "sensors/humidity/${timestamp()}.json"
+    role_arn    = aws_iam_role.iot_role.arn
   }
 }
 
@@ -142,12 +154,18 @@ resource "aws_iot_topic_rule" "aqi_rule" {
   name        = "aqi_data_rule"
   description = "Rule for processing air quality sensor data"
   enabled     = true
-  sql         = "SELECT * FROM 'sensors/aqi'"
+  sql         = "SELECT *, timestamp() as timestamp FROM 'eco/sensors/aqi'"
   sql_version = "2016-03-23"
 
   cloudwatch_logs {
     log_group_name = aws_cloudwatch_log_group.sensor_logs.name
     role_arn       = aws_iam_role.iot_role.arn
+  }
+  
+  s3 {
+    bucket_name = aws_s3_bucket.ecomonitor_raw_data.bucket
+    key         = "sensors/aqi/${timestamp()}.json"
+    role_arn    = aws_iam_role.iot_role.arn
   }
 }
 
@@ -155,12 +173,33 @@ resource "aws_iot_topic_rule" "co2_rule" {
   name        = "co2_data_rule"
   description = "Rule for processing CO2 sensor data"
   enabled     = true
-  sql         = "SELECT * FROM 'sensors/co2'"
+  sql         = "SELECT *, timestamp() as timestamp FROM 'eco/sensors/co2'"
   sql_version = "2016-03-23"
 
   cloudwatch_logs {
     log_group_name = aws_cloudwatch_log_group.sensor_logs.name
     role_arn       = aws_iam_role.iot_role.arn
+  }
+  
+  s3 {
+    bucket_name = aws_s3_bucket.ecomonitor_raw_data.bucket
+    key         = "sensors/co2/${timestamp()}.json"
+    role_arn    = aws_iam_role.iot_role.arn
+  }
+}
+
+# IoT Rule to route ALL sensor data to S3 for archival
+resource "aws_iot_topic_rule" "all_sensors_s3_rule" {
+  name        = "all_sensors_s3_rule"
+  description = "Rule for storing all sensor data in S3 as-is"
+  enabled     = true
+  sql         = "SELECT * FROM 'eco/sensors/#'"
+  sql_version = "2016-03-23"
+  
+  s3 {
+    bucket_name = aws_s3_bucket.ecomonitor_raw_data.bucket
+    key         = "raw-data/$${topic()}.json"
+    role_arn    = aws_iam_role.iot_role.arn
   }
 }
 
@@ -208,7 +247,21 @@ resource "aws_iam_role_policy" "iot_logging_policy" {
           "logs:DescribeLogStreams"
         ]
         Effect   = "Allow"
-        Resource = "${aws_cloudwatch_log_group.sensor_logs.arn}:*"
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:ListBucketVersions",
+          "s3:GetBucketLocation"
+        ],
+        Effect   = "Allow",
+        Resource = [
+          "${aws_s3_bucket.ecomonitor_raw_data.arn}",
+          "${aws_s3_bucket.ecomonitor_raw_data.arn}/*"
+        ]
       }
     ]
   })
@@ -218,11 +271,7 @@ resource "aws_iam_role_policy" "iot_logging_policy" {
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
-# Output the IoT endpoint to use in the applications
-output "iot_endpoint" {
-  value = data.aws_iot_endpoint.endpoint.endpoint_address
-  description = "IoT endpoint for device connection"
-}
+
 
 # Get the IoT endpoint
 data "aws_iot_endpoint" "endpoint" {
