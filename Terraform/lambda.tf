@@ -164,6 +164,101 @@ resource "aws_lambda_function" "co2_function" {
   ]
 }
 
+# IAM policy for Lambda to access S3, DynamoDB and SNS
+resource "aws_iam_policy" "s3_dynamo_sns_policy" {
+  name        = "lambda_s3_dynamo_sns_policy"
+  description = "Allows Lambda functions to read from S3, write to DynamoDB and publish to SNS"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Effect   = "Allow"
+        Resource = [
+          "${aws_s3_bucket.ecomonitor_raw_data.arn}",
+          "${aws_s3_bucket.ecomonitor_raw_data.arn}/*"
+        ]
+      },
+      {
+        Action = [
+          "dynamodb:PutItem",
+          "dynamodb:GetItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Effect   = "Allow"
+        Resource = "${aws_dynamodb_table.ecomonitor_sensor_data.arn}"
+      },
+      {
+        Action = [
+          "sns:Publish"
+        ]
+        Effect   = "Allow"
+        Resource = "${aws_sns_topic.ecomonitor_errors.arn}"
+      },
+      {
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Effect   = "Allow"
+        Resource = "arn:aws:logs:*:*:*"
+      }
+    ]
+  })
+}
+
+# Attach the policy to the role
+resource "aws_iam_role_policy_attachment" "s3_dynamo_sns_policy_attach" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = aws_iam_policy.s3_dynamo_sns_policy.arn
+}
+
+# Create ZIP archive for S3 to DynamoDB Lambda
+data "archive_file" "s3_to_dynamo_lambda_zip" {
+  type        = "zip"
+  source_file = "${path.module}/data cleaner/s3_to_dynamo.py"
+  output_path = "${path.module}/lambda_packages/s3_to_dynamo_function.zip"
+}
+
+# Lambda function to process S3 data and save to DynamoDB
+resource "aws_lambda_function" "s3_to_dynamo_function" {
+  function_name    = "s3_to_dynamo_processor"
+  filename         = data.archive_file.s3_to_dynamo_lambda_zip.output_path
+  source_code_hash = data.archive_file.s3_to_dynamo_lambda_zip.output_base64sha256
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "s3_to_dynamo.lambda_handler"
+  runtime          = "python3.9"
+  timeout          = 60
+  memory_size      = 512
+
+  environment {
+    variables = {
+      DYNAMODB_TABLE_NAME = aws_dynamodb_table.ecomonitor_sensor_data.name
+      SNS_ERROR_TOPIC_ARN = aws_sns_topic.ecomonitor_errors.arn
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.s3_dynamo_sns_policy_attach
+  ]
+}
+
+# Permission for S3 to invoke Lambda
+resource "aws_lambda_permission" "allow_s3" {
+  statement_id  = "AllowExecutionFromS3Bucket"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.s3_to_dynamo_function.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = aws_s3_bucket.ecomonitor_raw_data.arn
+}
+
 # CloudWatch Events / EventBridge rule to trigger the temperature lambda function every 5 minutes
 resource "aws_cloudwatch_event_rule" "temperature_event_rule" {
   name                = "temperature_sensor_trigger"
