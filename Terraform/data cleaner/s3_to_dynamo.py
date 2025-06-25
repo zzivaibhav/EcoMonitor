@@ -20,6 +20,22 @@ sns_client = boto3.client('sns')
 TABLE_NAME = os.environ.get('DYNAMODB_TABLE_NAME')
 ERROR_TOPIC_ARN = os.environ.get('SNS_ERROR_TOPIC_ARN')
 
+def ensure_string_types(data):
+    """Make sure all required fields are the correct type for DynamoDB"""
+    if 'timestamp' in data:
+        # Ensure timestamp is always a string
+        data['timestamp'] = str(data['timestamp'])
+    
+    if 'device_id' in data:
+        # Ensure device_id is always a string
+        data['device_id'] = str(data['device_id'])
+    
+    if 'reading_date' in data:
+        # Ensure reading_date is always a string
+        data['reading_date'] = str(data['reading_date'])
+    
+    return data
+
 def lambda_handler(event, context):
     try:
         # Log the entire event for debugging
@@ -84,10 +100,16 @@ def lambda_handler(event, context):
             if 'sensor_type' not in sensor_data:
                 sensor_data['sensor_type'] = sensor_type
             
+            # Ensure key attributes are of the correct type for DynamoDB
+            sensor_data = ensure_string_types(sensor_data)
+            
+            # Log the data before putting into DynamoDB
+            logger.info(f"Attempting to save data to DynamoDB: {json.dumps(sensor_data, default=str)}")
+            
             # Put item in DynamoDB
             response = table.put_item(Item=sensor_data)
             
-            logger.info(f"Data saved to DynamoDB: {json.dumps(sensor_data, default=str)}")
+            logger.info(f"Data successfully saved to DynamoDB: {json.dumps(sensor_data, default=str)}")
             return {
                 'statusCode': 200,
                 'body': json.dumps(f"Successfully processed {key}")
@@ -105,6 +127,21 @@ def lambda_handler(event, context):
             return {
                 'statusCode': 404,
                 'body': json.dumps(f"Error: File not found - {key}")
+            }
+        
+        except dynamodb.meta.client.exceptions.ValidationException as ve:
+            error_message = f"DynamoDB validation error for file {key}: {str(ve)}"
+            logger.error(error_message)
+            logger.error(f"Item that caused the error: {json.dumps(sensor_data, default=str)}")
+            if ERROR_TOPIC_ARN:
+                sns_client.publish(
+                    TopicArn=ERROR_TOPIC_ARN,
+                    Subject=f"EcoMonitor DynamoDB Validation Error",
+                    Message=error_message
+                )
+            return {
+                'statusCode': 400,
+                'body': json.dumps(f"Error: DynamoDB validation failed - {str(ve)}")
             }
     
     except Exception as e:
