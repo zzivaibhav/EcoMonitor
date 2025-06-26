@@ -238,6 +238,12 @@ resource "aws_lambda_function" "s3_to_dynamo_function" {
   timeout          = 60
   memory_size      = 512
 
+  # VPC configuration for private subnet deployment
+  vpc_config {
+    subnet_ids         = [aws_subnet.private_subnet_1.id, aws_subnet.private_subnet_2.id]
+    security_group_ids = [aws_security_group.lambda_sg.id]
+  }
+
   environment {
     variables = {
       DYNAMODB_TABLE_NAME = aws_dynamodb_table.ecomonitor_sensor_data.name
@@ -246,7 +252,8 @@ resource "aws_lambda_function" "s3_to_dynamo_function" {
   }
 
   depends_on = [
-    aws_iam_role_policy_attachment.s3_dynamo_sns_policy_attach
+    aws_iam_role_policy_attachment.s3_dynamo_sns_policy_attach,
+    aws_iam_role_policy_attachment.lambda_vpc_policy_attach
   ]
 }
 
@@ -341,6 +348,53 @@ resource "aws_lambda_permission" "co2_cloudwatch_permission" {
   function_name = aws_lambda_function.co2_function.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.co2_event_rule.arn
+}
+
+# Security group for Lambda
+resource "aws_security_group" "lambda_sg" {
+  name        = "lambda_s3_to_dynamo_sg"
+  description = "Security group for S3 to DynamoDB Lambda function"
+  vpc_id      = aws_vpc.ecomonitor_vpc.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "EcoMonitor-Lambda-SG"
+  }
+}
+
+# IAM policy for Lambda VPC execution
+resource "aws_iam_policy" "lambda_vpc_policy" {
+  name        = "lambda_vpc_execution_policy"
+  description = "Allows Lambda functions to create ENIs in VPC"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "ec2:CreateNetworkInterface",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DeleteNetworkInterface",
+          "ec2:AssignPrivateIpAddresses",
+          "ec2:UnassignPrivateIpAddresses"
+        ]
+        Effect   = "Allow"
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Attach the VPC policy to the Lambda role
+resource "aws_iam_role_policy_attachment" "lambda_vpc_policy_attach" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = aws_iam_policy.lambda_vpc_policy.arn
 }
 
 # Output the Lambda function ARNs
