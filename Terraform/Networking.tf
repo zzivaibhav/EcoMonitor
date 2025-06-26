@@ -21,7 +21,7 @@ resource "aws_internet_gateway" "igw" {
   }
 }
 
-# Create Public Subnets
+# Create Public Subnet
 resource "aws_subnet" "public_subnet_1" {
   vpc_id                  = aws_vpc.ecomonitor_vpc.id
   cidr_block              = "10.0.1.0/24"
@@ -30,17 +30,6 @@ resource "aws_subnet" "public_subnet_1" {
   
   tags = {
     Name = "EcoMonitor-Public-Subnet-1"
-  }
-}
-
-resource "aws_subnet" "public_subnet_2" {
-  vpc_id                  = aws_vpc.ecomonitor_vpc.id
-  cidr_block              = "10.0.2.0/24"
-  availability_zone       = "${data.aws_region.current.name}b"
-  map_public_ip_on_launch = true
-  
-  tags = {
-    Name = "EcoMonitor-Public-Subnet-2"
   }
 }
 
@@ -116,14 +105,9 @@ resource "aws_route_table" "private_route_table" {
   }
 }
 
-# Associate Public Subnets with Public Route Table
+# Associate Public Subnet with Public Route Table
 resource "aws_route_table_association" "public_subnet_1_association" {
   subnet_id      = aws_subnet.public_subnet_1.id
-  route_table_id = aws_route_table.public_route_table.id
-}
-
-resource "aws_route_table_association" "public_subnet_2_association" {
-  subnet_id      = aws_subnet.public_subnet_2.id
   route_table_id = aws_route_table.public_route_table.id
 }
 
@@ -192,8 +176,8 @@ output "vpc_id" {
 }
 
 output "public_subnet_ids" {
-  value       = [aws_subnet.public_subnet_1.id, aws_subnet.public_subnet_2.id]
-  description = "IDs of public subnets"
+  value       = [aws_subnet.public_subnet_1.id]
+  description = "ID of public subnet"
 }
 
 output "private_subnet_ids" {
