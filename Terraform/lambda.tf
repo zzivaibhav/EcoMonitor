@@ -164,10 +164,10 @@ resource "aws_lambda_function" "co2_function" {
   ]
 }
 
-# IAM policy for Lambda to access S3, DynamoDB and SNS
+# IAM policy for Lambda to access S3, DynamoDB, SNS and CloudWatch
 resource "aws_iam_policy" "s3_dynamo_sns_policy" {
   name        = "lambda_s3_dynamo_sns_policy"
-  description = "Allows Lambda functions to read from S3, write to DynamoDB and publish to SNS"
+  description = "Allows Lambda functions to read from S3, write to DynamoDB, publish to SNS and publish CloudWatch metrics"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -200,6 +200,13 @@ resource "aws_iam_policy" "s3_dynamo_sns_policy" {
         ]
         Effect   = "Allow"
         Resource = "${aws_sns_topic.ecomonitor_errors.arn}"
+      },
+      {
+        Action = [
+          "cloudwatch:PutMetricData"
+        ]
+        Effect   = "Allow"
+        Resource = "*"
       },
       {
         Action = [
