@@ -34,17 +34,22 @@ resource "aws_s3_bucket_lifecycle_configuration" "ecomonitor_lifecycle" {
   bucket = aws_s3_bucket.ecomonitor_raw_data.id
 
   rule {
-    id     = "archive-after-90-days"
+    id     = "delete-after-2-days"
     status = "Enabled"
 
-    transition {
-      days          = 90
-      storage_class = "STANDARD_IA"
+    # Delete objects after 2 days (closest to 34 hours possible with S3 lifecycle)
+    expiration {
+      days = 2
     }
 
-    transition {
-      days          = 365
-      storage_class = "GLACIER"
+    # Also delete non-current versions after 2 days
+    noncurrent_version_expiration {
+      noncurrent_days = 2
+    }
+
+    # Delete incomplete multipart uploads after 1 day
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
     }
   }
 }
